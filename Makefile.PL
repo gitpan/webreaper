@@ -1,7 +1,11 @@
-# $Id: Makefile.PL,v 1.8 2003/12/03 20:38:27 comdog Exp $
+# $Id: Makefile.PL,v 1.10 2004/02/20 20:05:56 comdog Exp $
 use ExtUtils::MakeMaker;
 
-sub ExtUtils::MM_Any::test_via_harness
+eval "use Test::Manifest";
+
+unless( $@ )
+	{
+	*ExtUtils::MM_Any::test_via_harness = sub
 	{
     my($self, $perl, $tests) = @_;
 
@@ -9,19 +13,15 @@ sub ExtUtils::MM_Any::test_via_harness
            qq|"-e" "run_t_manifest(\$(TEST_VERBOSE), '\$(INST_LIB)', | .
            qq|'\$(INST_ARCHLIB)')"\n|;
 	}
+	}
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
-	'VERSION'       => '0.20',
+	'VERSION'       => '0.25',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	
 	'PREREQ_PM' => {
-		'File::Find::Rule'  => '0',
-		'Test::File'        => '0',
-		'Test::Manifest'    => '0.91',
-		'Test::More'        => '0',
-		'Test::Pod'         => '0.90',
 		},
 
 	'MAN1PODS' => {
