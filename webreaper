@@ -1,12 +1,15 @@
 #!/usr/bin/perl -w
-# $Id: webreaper,v 1.3 2002/12/11 22:11:02 comdog Exp $
+# $Id: webreaper,v 1.7 2003/12/03 20:55:15 comdog Exp $
 use strict;
 
 use ExtUtils::Command qw(mkpath);
+use Getopt::Std;
 use File::Basename qw(dirname);
 use File::Spec::Functions qw(catfile);
 use HTML::SimpleLinkExtor;
-use LWP::Simple;
+use LWP::UserAgent;
+use MIME::Base64 qw(encode_base64);
+use HTTP::Cookies;
 use URI;
 
 =head1 NAME
@@ -25,6 +28,20 @@ The webreaper program downloads web sites.  It creates a directory,
 named after the host of the URL given on the command line, in the
 current working directory.
 
+=head2 Command line switches
+
+=over 4
+
+=item -r --- referer for the first URL
+
+=item -u --- username for basic auth
+
+=item -p --- password for basic auth
+
+=item -v --- verbose ouput
+
+=back
+
 =head2 FEATURES SO FAR
 
 =over 4
@@ -37,11 +54,31 @@ current working directory.
 
 =over 4
 
-=item use Basic username and password
-
 =item limit directory level
 
-=item limit content types
+=item limit content types, file names
+
+=item specify a set of patterns to ignore
+
+=item do conditional GETs
+
+=item Tk or curses interface?
+
+=item create an error log, report, or something
+
+=item download stats (clock time, storage space, etc)
+
+=item multiple levels of verbosity for output
+
+=item read items from a config file
+
+=item allow user to add/delete allowed domains during runtime
+
+=item specify directory where to save downloads
+
+=item optional sleep time between requests
+
+=item ensure that path names are safe (i.e. no ..)
 
 =back
 
@@ -61,52 +98,131 @@ brian d foy, E<lt>bdfoy@cpan.orgE<gt>
 
 =head1 COPYRIGHT
 
-Copyright 2002, brian d foy, All rights reserved.
+Copyright 2003, brian d foy, All rights reserved.
 
 You may use this program under the same terms as Perl itself.
 
 =cut
 
-@ARGV = qw(https://hosta.atsc.eustis.army.mil/atdl/docs/accp/pa0100/TOC.htm);
+my %Allowed = map { $_, 1 } qw(
+ 	);
+	
+my @start = ( $ARGV[-1] );
 
-my @start = ( $ARGV[0] );
+my %Referers;
+my $cookie_jar = HTTP::Cookies->new();
 
 my $Domain = lc URI->new( $start[0] )->host;
+$Allowed{$Domain} = 1;
 print "Domain is $Domain\n";
 
+my %opts;
+getopt('upr', \%opts);
+
+my $Verbose = defined $opts{v} ? 1 : 0;
+my $authorization = MIME::Base64::encode_base64( join ":", @opts{qw(u p)} )
+	if defined $opts{u} && defined $opts{p};
+
+print "User is $opts{u}\n" if $Verbose;
+print "Password is $opts{p}\n" if $Verbose;
+print "Referer is $opts{r}\n" if $Verbose;
+print "Authorization is $authorization\n" if $Verbose;
+
+$Referers{$start[0]} = $opts{r} if defined $opts{r};
+
+my $referer_host = URI->new( $opts{r} )->host if $opts{r};
+print "Referer host is $referer_host\n" if $Verbose;
+$Allowed{ $referer_host } = 1;
+
+
+my $UA = LWP::UserAgent->new;
+$UA->agent( "Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)" );
+$UA->cookie_jar( $cookie_jar );
+
+my %Stats;
 my %Seen;
 while( @start )
 	{
 	my $url = shift @start;
-	$url =~ s/#.*//;
 	next if exists $Seen{ $url };
 	next if $url =~ m/^javascript:/;
+	$url =~ s/#.*//;
+	print "Processing $url --> " if $Verbose;
 
-	print "Processing $url\n";
+	my $request = make_request( $url );
+	
+	#print $request->as_string;
+	
+	#print "-" x 73, "\n";
+	#<STDIN>;
+	my $response = $UA->request( $request );
 
-	my $data = get( $url );
-	store( \$data, $url );
+	my $data = $response->content_ref;
+	my $code = $response->code;
+	
+	print "$code\n" if $Verbose;
+	
+	$Stats{$code}++;
+	
+	store( $data, $url );
 
 	$Seen{ $url }++;
 
-	my $extor = HTML::SimpleLinkExtor->new( $url );
- 	$extor->parse( $data );
-
- 	push @start,
- 		map { $_->[1] }
- 		grep {
- 			not exists $Seen{ $_->[1] } and
- 			$Domain eq $_->[0]
- 			}
- 		map {
- 			eval {
- 				my $domain = lc URI->new( $_ )->host;
- 				$domain ? [ $domain, $_ ] : ();
- 				} || ();
- 			} $extor->links;
+	my $text = $response->as_string;
+	
+	my $base = $response->base;
+	
+	if( $response->content_type eq 'text/html' )
+		{
+		#print "Extracting links...\n";
+		my $extor = HTML::SimpleLinkExtor->new( $base );
+		$extor->parse( $$data );
+	
+		push @start,
+			map { $Referers{ $_->[1] } = $url; $_->[1] }
+			grep {
+				not exists $Seen{ $_->[1] } and
+				exists $Allowed{ $_->[0] }
+				}
+			map {
+				eval {
+					my $domain = lc URI->new( $_ )->host;
+					#print "Domain is $domain\n";
+					$domain ? [ $domain, $_ ] : ();
+					} || ();
+				} $extor->links;
+				
+		print "Queue is now " . @start . "\n" if $Verbose;
+		}
+		
  	}
 
- sub store
+	
+sub make_request
+	{
+	my $url = shift;
+	
+	my $url_o = URI->new( $url );
+	my $host = $url_o->host;
+		
+	my $request = HTTP::Request->new( GET => $url );
+	
+	$request->authorization_basic( $opts{u}, $opts{p} ) if $authorization;
+	
+	$request->referer( "$Referers{$url}" ) if defined $Referers{$url};
+
+	$request->header( 'Accept-Language' => 'en' );
+	$request->header( 'Connection'      => 'close' );
+	$request->header( 'Accept'          => 
+		'image/png, image/jpeg;q=0.9, image/pjpeg;q=0.9, image/gif;q=0.8, image/x-xbitmap;q=0.5, image/xbm;q=0.5, text/html, text/plain;q=0.8, */*;q=0.1' );
+	$request->header( 'Host'            => $host );
+	$request->header( 'User-Agent'      => 
+		'Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)' );
+	
+	return $request;
+	}
+	
+sub store
  	{
 	my $data_ref = shift;
 	my $url      = URI->new( shift );
@@ -122,15 +238,34 @@ while( @start )
 	$path =~ s|^/||;
 	$path =~ s|/$|/index.html|;
 
+	if( -d $path )
+		{
+		print "Error: file path is already a directory [ $path ]\n";
+		return;
+		}
+		
 	$path =  catfile( $domain, $path );
 	my $dir = dirname $path;
 
-	print "Directory is $dir\n";
+	#print "Directory is $dir\n";
 
 	local @ARGV = ( $dir );
 
-	mkpath unless -d $dir;
-
+	if( -e $dir and not -d $dir )
+		{
+		print "Error: Removing file that should be a dir [$dir]\n";
+		unlink $dir;
+		}
+		
+	eval { mkpath unless -e $dir };
+	if( $@ )
+		{
+		print "Error: mkpath could not make $dir: $@\n";
+		return;
+		}
+		
+	#print "Path is $path\n";
+	
 	my $fh;
 	unless( open $fh, "> $path" )
 		{
@@ -140,4 +275,5 @@ while( @start )
 
 	print $fh $$data_ref;
 	close $fh;
+	#print "File saved\n";
 	}

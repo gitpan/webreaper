@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.7 2002/12/13 18:38:27 comdog Exp $
+# $Id: Makefile.PL,v 1.8 2003/12/03 20:38:27 comdog Exp $
 use ExtUtils::MakeMaker;
 
 sub ExtUtils::MM_Any::test_via_harness
@@ -12,7 +12,7 @@ sub ExtUtils::MM_Any::test_via_harness
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
-	'VERSION'       => '0.12',
+	'VERSION'       => '0.20',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	

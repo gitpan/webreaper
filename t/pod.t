@@ -1,5 +1,7 @@
-# $Id: pod.t,v 1.1 2002/12/06 04:31:25 comdog Exp $
+# $Id: pod.t,v 1.2 2003/12/03 21:10:19 comdog Exp $
 
-use Test::Pod tests => 1;
+use Test::More;
+eval "use Test::Pod 1.00";
+plan skip_all => "Test::Pod 1.00 required for testing POD" if $@;
+all_pod_files_ok();
 
-pod_ok('blib/script/webreaper');
