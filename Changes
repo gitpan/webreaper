@@ -1,4 +1,8 @@
-# $Id: Changes,v 1.7 2004/02/28 13:29:21 comdog Exp $
+# $Id: Changes,v 1.8 2004/02/28 13:31:33 comdog Exp $
+
+0.30 - Sat Feb 28 08:36:30 2004
+* new options for limiting requests, storing in flat dir, create zip archive
+* lots of clean-ups and refactoring to make everything easier to read
 
 0.25 - Fri Feb 20 15:12:12 2004
 	* stay under path of original URL

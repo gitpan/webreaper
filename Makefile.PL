@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.11 2004/02/28 13:24:04 comdog Exp $
+# $Id: Makefile.PL,v 1.12 2004/09/25 23:36:20 comdog Exp $
 use ExtUtils::MakeMaker;
 
 eval "use Test::Manifest";
@@ -17,11 +17,12 @@ unless( $@ )
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
-	'VERSION'       => '0.30',
+	'VERSION'       => '0.31',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	
 	'PREREQ_PM' => {
+		'HTML::SimpleLinkExtor' => '0',
 		},
 
 	'MAN1PODS' => {
